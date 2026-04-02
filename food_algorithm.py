@@ -1,9 +1,16 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.neural_network import MLPRegressor
 import random
 import warnings
+
+try:
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.neural_network import MLPRegressor
+    SKLEARN_AVAILABLE = True
+except Exception:
+    StandardScaler = None
+    MLPRegressor = None
+    SKLEARN_AVAILABLE = False
 
 try:
     import tensorflow as tf  # noqa: F401
@@ -16,6 +23,15 @@ except Exception:
     layers = None
 
 warnings.filterwarnings('ignore')
+
+
+class IdentityScaler:
+    """Fallback scaler when sklearn is unavailable."""
+    def fit_transform(self, X):
+        return np.asarray(X, dtype=float)
+
+    def transform(self, X):
+        return np.asarray(X, dtype=float)
 
 class FoodAlgorithm:
     def __init__(self, csv_path):
@@ -73,7 +89,7 @@ class FoodAlgorithm:
                          'Meal_Code']
 
         X_raw = self.df[self.features].fillna(0)
-        self.scaler = StandardScaler()
+        self.scaler = StandardScaler() if SKLEARN_AVAILABLE else IdentityScaler()
         self.X_scaled = self.scaler.fit_transform(X_raw)
 
         quality = (self.df['Protein'] / (self.df['Calories'] + 1)) * 100
@@ -98,22 +114,29 @@ class FoodAlgorithm:
             except Exception as e:
                 print(f"⚠️ TensorFlow model failed, switching to sklearn fallback: {e}")
 
-        model = MLPRegressor(
-            hidden_layer_sizes=(32, 16),
-            activation='relu',
-            solver='adam',
-            random_state=42,
-            max_iter=600
-        )
-        model.fit(self.X_scaled, self.y)
-        self.model = model
-        self.model_type = 'sklearn'
+        if SKLEARN_AVAILABLE:
+            model = MLPRegressor(
+                hidden_layer_sizes=(32, 16),
+                activation='relu',
+                solver='adam',
+                random_state=42,
+                max_iter=600
+            )
+            model.fit(self.X_scaled, self.y)
+            self.model = model
+            self.model_type = 'sklearn'
+            return
+
+        self.model = None
+        self.model_type = 'heuristic'
 
     def _score_food(self, food_row):
         X = food_row[self.features].fillna(0).values.reshape(1, -1)
         X_scaled = self.scaler.transform(X)
         if self.model_type == 'tensorflow':
             score = float(self.model.predict(X_scaled, verbose=0)[0, 0])
+        elif self.model_type == 'heuristic':
+            score = (food_row['Protein'] / (food_row['Calories'] + 1)) * 120
         else:
             score = float(self.model.predict(X_scaled)[0])
         return max(0.0, min(100.0, score))
