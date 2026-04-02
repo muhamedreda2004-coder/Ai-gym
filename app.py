@@ -10,7 +10,7 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8')
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'
+app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
 app.config['JSON_AS_ASCII'] = False
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -471,4 +471,6 @@ def send_message():
         return jsonify({"reply": f"❌ Error: {str(e)}"})
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)

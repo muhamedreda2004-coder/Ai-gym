@@ -4,13 +4,16 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 class DatabaseHandler:
     def __init__(self, host=None, user=None, password=None, database=None):
-        host = host or os.getenv('MYSQL_HOST', 'localhost')
-        user = user or os.getenv('MYSQL_USER', 'root')
-        password = password or os.getenv('MYSQL_PASSWORD', '000002')
-        database = database or os.getenv('MYSQL_DATABASE', 'gymai')
+        host = host or os.getenv('MYSQL_HOST') or os.getenv('MYSQLHOST', 'localhost')
+        user = user or os.getenv('MYSQL_USER') or os.getenv('MYSQLUSER', 'root')
+        password = password or os.getenv('MYSQL_PASSWORD') or os.getenv('MYSQLPASSWORD', '000002')
+        database = database or os.getenv('MYSQL_DATABASE') or os.getenv('MYSQLDATABASE', 'gymai')
+        port = os.getenv('MYSQL_PORT') or os.getenv('MYSQLPORT')
 
         self.database = database
         self.server_config = {'host': host, 'user': user, 'password': password}
+        if port:
+            self.server_config['port'] = int(port)
         self.config = {**self.server_config, 'database': self.database}
         self._init_db()
 
@@ -27,7 +30,8 @@ class DatabaseHandler:
             # Ensure the MySQL database exists before using it.
             conn = mysql.connector.connect(**self.server_config)
             cursor = conn.cursor()
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {self.database}")
+            db_name = str(self.database).replace('`', '')
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}`")
             conn.commit()
             cursor.close()
             conn.close()
