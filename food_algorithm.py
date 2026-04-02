@@ -1,11 +1,20 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPRegressor
 import random
 import warnings
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
+
+try:
+    import tensorflow as tf  # noqa: F401
+    from tensorflow import keras
+    from tensorflow.keras import layers
+    TENSORFLOW_AVAILABLE = True
+except Exception:
+    TENSORFLOW_AVAILABLE = False
+    keras = None
+    layers = None
+
 warnings.filterwarnings('ignore')
 
 class FoodAlgorithm:
@@ -17,10 +26,11 @@ class FoodAlgorithm:
             print(f"❌ Error reading CSV: {e}")
             raise
 
+        self.model_type = None
         self._clean_data()
         self._prepare_features()
         self._build_and_train_model()
-        print("✅ Food Algorithm with simple Deep Learning model ready")
+        print(f"✅ Food Algorithm ready (model: {self.model_type})")
 
     def _clean_data(self):
         rename_map = {
@@ -72,20 +82,41 @@ class FoodAlgorithm:
         self.y = self.y.clip(0, 100)
 
     def _build_and_train_model(self):
-        model = keras.Sequential([
-            layers.Dense(32, activation='relu', input_shape=(self.X_scaled.shape[1],)),
-            layers.Dropout(0.2),
-            layers.Dense(16, activation='relu'),
-            layers.Dense(1)
-        ])
-        model.compile(optimizer='adam', loss='mse')
-        model.fit(self.X_scaled, self.y, epochs=50, batch_size=16, verbose=0)
+        if TENSORFLOW_AVAILABLE:
+            try:
+                model = keras.Sequential([
+                    layers.Dense(32, activation='relu', input_shape=(self.X_scaled.shape[1],)),
+                    layers.Dropout(0.2),
+                    layers.Dense(16, activation='relu'),
+                    layers.Dense(1)
+                ])
+                model.compile(optimizer='adam', loss='mse')
+                model.fit(self.X_scaled, self.y, epochs=30, batch_size=16, verbose=0)
+                self.model = model
+                self.model_type = 'tensorflow'
+                return
+            except Exception as e:
+                print(f"⚠️ TensorFlow model failed, switching to sklearn fallback: {e}")
+
+        model = MLPRegressor(
+            hidden_layer_sizes=(32, 16),
+            activation='relu',
+            solver='adam',
+            random_state=42,
+            max_iter=600
+        )
+        model.fit(self.X_scaled, self.y)
         self.model = model
+        self.model_type = 'sklearn'
 
     def _score_food(self, food_row):
         X = food_row[self.features].fillna(0).values.reshape(1, -1)
         X_scaled = self.scaler.transform(X)
-        return float(self.model.predict(X_scaled, verbose=0)[0, 0])
+        if self.model_type == 'tensorflow':
+            score = float(self.model.predict(X_scaled, verbose=0)[0, 0])
+        else:
+            score = float(self.model.predict(X_scaled)[0])
+        return max(0.0, min(100.0, score))
 
     def calculate_needs(self, weight, height, age, gender, activity_level, goal):
         weight, height, age = float(weight), float(height), float(age)
