@@ -1,5 +1,11 @@
-import ollama
 from datetime import datetime
+
+try:
+    import ollama
+    OLLAMA_AVAILABLE = True
+except Exception:
+    ollama = None
+    OLLAMA_AVAILABLE = False
 
 class ChatManager:
     def __init__(self, food_algo, exercise_algo, db_handler):
@@ -232,6 +238,8 @@ class ChatManager:
     def _handle_ai_chat(self, username, message, session):
         try:
             profile = session.get('profile_data', {})
+            if not OLLAMA_AVAILABLE:
+                return self._fallback_ai_reply(profile, message)
 
             body_analysis_text = ""
             try:
@@ -289,4 +297,18 @@ Your response:"""
 
         except Exception as e:
             print(f"AI Error: {e}")
-            return "🤖 I'm having trouble connecting to my AI brain right now. Please try again in a moment!"
+            return self._fallback_ai_reply(session.get('profile_data', {}), message)
+
+    def _fallback_ai_reply(self, profile, message):
+        goal = profile.get('goal', 'stay fit')
+        injuries = profile.get('injuries', '')
+
+        warning = ""
+        if injuries:
+            warning = " Considering your injuries, use controlled movement and stop if pain increases."
+
+        return (
+            f"I can still help without cloud AI. Based on your goal ({goal}), focus on progressive overload, "
+            f"protein intake, and consistent sleep (7-9h). For this question: '{message}', start with "
+            f"2-3 focused sessions this week, track reps/weights, and adjust calories slowly each week.{warning}"
+        )
